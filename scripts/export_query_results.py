@@ -72,12 +72,12 @@ QUERIES: list[tuple[str, str, str, str]] = [
         "aggregate; a healthy positive r justifies lag features in the model.",
         """
         SELECT COUNT(*) AS paired_days,
-               ROUND(
+               CAST(
                  (COUNT(*) * SUM(t.pm25_avg * y.pm25_avg) - SUM(t.pm25_avg) * SUM(y.pm25_avg))
                  / SQRT(
                      (COUNT(*) * SUM(t.pm25_avg * t.pm25_avg) - POW(SUM(t.pm25_avg), 2))
                    * (COUNT(*) * SUM(y.pm25_avg * y.pm25_avg) - POW(SUM(y.pm25_avg), 2))
-                   ), 4) AS lag1_pearson_r
+                   ) AS DECIMAL(10,4)) AS lag1_pearson_r
         FROM daily_aggregates y
         JOIN daily_aggregates t
           ON t.station_id = y.station_id AND t.agg_date = y.agg_date + INTERVAL 1 DAY
@@ -144,7 +144,9 @@ def cell(value) -> str:
     if value is None:
         return "*NULL*"
     if isinstance(value, Decimal):
-        value = float(value)
+        # Keep the scale MySQL returned: 12.00 stays 12.00, but a Pearson r of
+        # 0.5632 is not silently rounded to 0.56.
+        return str(value)
     if isinstance(value, float):
         return f"{value:,.2f}"
     if isinstance(value, datetime):

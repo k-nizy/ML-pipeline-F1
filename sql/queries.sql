@@ -55,12 +55,12 @@ ORDER BY avg_pm25 DESC;
 --     (MySQL has no CORR() aggregate).
 -- -----------------------------------------------------------------------------
 SELECT COUNT(*) AS paired_days,
-       ROUND(
+       CAST(
          (COUNT(*) * SUM(t.pm25_avg * y.pm25_avg) - SUM(t.pm25_avg) * SUM(y.pm25_avg))
          / SQRT(
              (COUNT(*) * SUM(t.pm25_avg * t.pm25_avg) - POW(SUM(t.pm25_avg), 2))
            * (COUNT(*) * SUM(y.pm25_avg * y.pm25_avg) - POW(SUM(y.pm25_avg), 2))
-           ), 4) AS lag1_pearson_r
+           ) AS DECIMAL(10,4)) AS lag1_pearson_r
 FROM daily_aggregates y
 JOIN daily_aggregates t
   ON t.station_id = y.station_id
