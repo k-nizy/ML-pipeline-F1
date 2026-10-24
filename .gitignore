@@ -1,0 +1,32 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# ---- Secrets / local config ----
+.env
+.env.*
+!.env.example
+
+# ---- Raw data (re-downloadable, see data/README.md) ----
+data/raw/*
+!data/raw/.gitkeep
+
+# ---- Generated artefacts ----
+outputs/models/*
+!outputs/models/.gitkeep
+outputs/figures/*
+!outputs/figures/.gitkeep
+
+# ---- Local tooling (databases, scratch) ----
+tools/
+*.log
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
