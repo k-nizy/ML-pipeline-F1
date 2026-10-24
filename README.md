@@ -130,18 +130,7 @@ Six tables in three layers — full rationale in [`sql/README.md`](sql/README.md
 
 MongoDB mirrors `readings` as one document per hour with embedded `target` and `weather` sub-documents — see [`mongodb/`](mongodb/).
 
-## 6. Team and contributions
-
-| Member | Role | Main components | Commits |
-|---|---|---|---|
-| _Name_ | Data lead | `scripts/preprocess.py`, `notebooks/01_eda.ipynb`, `data/processed/` | _n_ |
-| _Name_ | Modelling lead | `scripts/train_model.py`, `scripts/predict.py`, experiment table, report PDF | _n_ |
-| _Name_ | **SQL lead** | repo setup, `sql/`, `src/api/`, `scripts/load_mysql.py`, `export_query_results.py` | _n_ |
-| _Name_ | MongoDB lead | `mongodb/`, `src/api/routers/mongo.py`, Atlas setup | _n_ |
-
-> Replace the placeholders before submission — the rubric marks each member's commit count individually, so every contributor must commit from their own GitHub account.
-
-## 7. Reproducing the results
+## 6. Reproducing the results
 
 1. `pip install -r requirements.txt`
 2. Download the raw CSV (§2) into `data/raw/`
@@ -151,7 +140,7 @@ MongoDB mirrors `readings` as one document per hour with embedded `target` and `
 6. `uvicorn src.api.main:app` in one terminal, `python scripts/predict.py` in another
 7. `python scripts/export_query_results.py` to regenerate the evidence file
 
-## 8. Notes / limitations
+## 7. Notes / limitations
 
 - `pm2.5` gaps are kept as `NULL` in the database and flagged (`is_imputed`) rather than silently zero-filled; zero would look like clean air and bias the model.
 - Weather variables come from Beijing Capital Airport while PM2.5 comes from the US Embassy monitor ~20 km away — a documented spatial mismatch inherent to this dataset.
