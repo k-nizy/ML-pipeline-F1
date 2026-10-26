@@ -1,0 +1,35 @@
+[
+  {
+    "station": { "id": 1, "name": "Beijing US Embassy", "city": "Beijing" },
+    "timestamp": { "$date": "2010-01-02T00:00:00Z" },
+    "target": { "pm25": 129, "imputed": false },
+    "weather": {
+      "dewp": -16, "temp": -4, "pres": 1020,
+      "wind_dir": "SE", "wind_speed": 1.79,
+      "snow_hours": 0, "rain_hours": 0
+    },
+    "ingested_at": { "$date": "2026-10-26T13:50:00Z" }
+  },
+  {
+    "station": { "id": 1, "name": "Beijing US Embassy", "city": "Beijing" },
+    "timestamp": { "$date": "2010-01-02T01:00:00Z" },
+    "target": { "pm25": 148, "imputed": false },
+    "weather": {
+      "dewp": -15, "temp": -4, "pres": 1020,
+      "wind_dir": "SE", "wind_speed": 2.68,
+      "snow_hours": 0, "rain_hours": 0
+    },
+    "ingested_at": { "$date": "2026-10-26T13:50:00Z" }
+  },
+  {
+    "station": { "id": 1, "name": "Beijing US Embassy", "city": "Beijing" },
+    "timestamp": { "$date": "2010-01-02T03:00:00Z" },
+    "target": { "pm25": 181, "imputed": false },
+    "weather": {
+      "dewp": -7, "temp": -5, "pres": 1022,
+      "wind_dir": "SE", "wind_speed": 5.36,
+      "snow_hours": 1, "rain_hours": 0
+    },
+    "ingested_at": { "$date": "2026-10-26T13:50:00Z" }
+  }
+]
