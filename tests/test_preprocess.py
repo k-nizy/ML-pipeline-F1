@@ -14,7 +14,7 @@ class TestPreprocessData(unittest.TestCase):
 
     def test_dataset_shape(self):
         df = preprocess_data()
-        self.assertEqual(df.shape, (43824, 14))
+        self.assertEqual(df.shape, (43824, 13))
 
     def test_timestamps_are_sorted(self):
         df = preprocess_data()

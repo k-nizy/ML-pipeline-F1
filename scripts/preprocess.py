@@ -43,6 +43,8 @@ def preprocess_data(input_file=RAW_FILE):
     )
 
     df = df.sort_values("timestamp").reset_index(drop=True)
+    
+    df = df.drop(columns=["No"], errors="ignore")
 
     if df["timestamp"].isna().any():
         raise ValueError("Timestamps cannot contain missing values.")
