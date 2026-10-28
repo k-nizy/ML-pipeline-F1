@@ -234,12 +234,14 @@ def update_reading(reading_id: int, payload: ReadingUpdate) -> dict[str, Any]:
     try:
         with cursor(commit=True) as cur:
             cur.execute(f"UPDATE readings SET {assignments} WHERE reading_id = %s", params)
-            if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail=f"reading {reading_id} not found")
     except pymysql.err.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="update violates a unique constraint") from exc
     except pymysql.err.MySQLError as exc:
         raise _db_error(exc) from exc
+
+    # MySQL counts *changed* rows, not matched ones, so rowcount is also 0 when the
+    # PUT body repeats the stored values. Only a genuinely missing row is a 404, so
+    # the existence check below decides, not rowcount.
     return _get_reading_or_404(reading_id)
 
 
