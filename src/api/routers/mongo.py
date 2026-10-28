@@ -29,7 +29,7 @@ tests to outputs/query_results.md.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from bson import ObjectId
@@ -50,6 +50,13 @@ def _clean(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     return doc
 
+def _to_object_id(reading_id: str) -> ObjectId:
+    """Check the id from the web address and turn it into an ObjectId."""
+    try:
+        return ObjectId(reading_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid reading id.")
+
 @router.get("/health")
 def mongo_health() -> dict:
     """Ping the Atlas cluster."""
@@ -60,7 +67,23 @@ def mongo_health() -> dict:
 @router.post("/readings", status_code=201)
 def create_reading(payload: dict) -> dict:
     """Insert one hourly document. Reject duplicates on (station.id, timestamp)."""
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
+    try:
+        payload["station"]["id"]
+        payload["timestamp"] = datetime.fromisoformat(str(payload["timestamp"]))
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Payload needs station.id and a valid ISO timestamp.",
+        )
+    payload["ingested_at"] = datetime.now(timezone.utc)
+    try:
+        get_collection().insert_one(payload)
+    except DuplicateKeyError:
+        raise HTTPException(
+            status_code=409,
+            detail="A reading for this station and hour already exists.",
+        )
+    return _clean(payload)
 
 
 @router.get("/readings")
@@ -71,7 +94,15 @@ def list_readings(
     offset: int = Query(default=0, ge=0),
 ) -> list:
     """Filtered, paginated read - the MongoDB twin of the SQL listing endpoint."""
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
+    query = {}
+    if start is not None or end is not None:
+        query["timestamp"] = {}
+        if start is not None:
+            query["timestamp"]["$gte"] = start
+        if end is not None:
+            query["timestamp"]["$lte"] = end
+    cursor = get_collection().find(query).sort("timestamp", 1).skip(offset).limit(limit)
+    return [_clean(doc) for doc in cursor]
 
 
 @router.get("/readings/latest")
@@ -94,16 +125,29 @@ def readings_by_range(start: datetime, end: datetime) -> list:
 @router.get("/readings/{reading_id}")
 def get_reading(reading_id: str) -> dict:
     """Fetch one document by its ObjectId string."""
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
+    doc = get_collection().find_one({"_id": _to_object_id(reading_id)})
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Reading not found.")
+    return _clean(doc)
 
 
 @router.put("/readings/{reading_id}")
 def update_reading(reading_id: str, payload: dict) -> dict:
     """Partial update (``$set``) of one document."""
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
+    oid = _to_object_id(reading_id)
+    payload.pop("_id", None)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Nothing to update.")
+    collection = get_collection()
+    result = collection.update_one({"_id": oid}, {"$set": payload})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Reading not found.")
+    return _clean(collection.find_one({"_id": oid}))
 
 
 @router.delete("/readings/{reading_id}", status_code=204)
 def delete_reading(reading_id: str) -> None:
     """Delete one document by ObjectId."""
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
+    result = get_collection().delete_one({"_id": _to_object_id(reading_id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Reading not found.")
