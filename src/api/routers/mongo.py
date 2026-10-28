@@ -32,6 +32,11 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
+from bson import ObjectId
+from bson.errors import InvalidId
+from pymongo.errors import DuplicateKeyError
+
+from src.api.db_mongo import get_collection
 
 router = APIRouter(prefix="/api/mongo", tags=["MongoDB"])
 
@@ -40,11 +45,16 @@ _NOT_IMPLEMENTED = (
     "See the module docstring for the agreed document shape."
 )
 
+def _clean(doc: dict) -> dict:
+    """Turn the ObjectId into plain text so it can be sent as JSON."""
+    doc["_id"] = str(doc["_id"])
+    return doc
 
 @router.get("/health")
 def mongo_health() -> dict:
-    """Ping the Atlas cluster. Replace with ``get_collection().database.command('ping')``."""
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
+    """Ping the Atlas cluster."""
+    get_collection().database.command("ping")
+    return {"status": "ok"}
 
 
 @router.post("/readings", status_code=201)
@@ -67,13 +77,18 @@ def list_readings(
 @router.get("/readings/latest")
 def latest_reading() -> dict:
     """Most recent document by ``timestamp``."""
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
+    doc = get_collection().find_one(sort=[("timestamp", -1)])
+    if doc is None:
+        raise HTTPException(status_code=404, detail="No readings found.")
+    return _clean(doc)
 
 
 @router.get("/readings/range")
 def readings_by_range(start: datetime, end: datetime) -> list:
     """Required time-series endpoint: records between two timestamps."""
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED)
+    query = {"timestamp": {"$gte": start, "$lte": end}}
+    cursor = get_collection().find(query).sort("timestamp", 1).limit(1000)
+    return [_clean(doc) for doc in cursor]
 
 
 @router.get("/readings/{reading_id}")
