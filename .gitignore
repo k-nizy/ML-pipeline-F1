@@ -1,4 +1,4 @@
-# ---- Python ----
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -6,26 +6,20 @@ __pycache__/
 venv/
 .ipynb_checkpoints/
 
-# ---- Secrets / local config ----
+# Secrets / local config
 .env
 .env.*
 !.env.example
 
-# ---- Raw data (re-downloadable, see data/README.md) ----
+# Raw data (re-downloadable, see data/README.md)
 data/raw/*
 !data/raw/.gitkeep
 
-# ---- Generated artefacts ----
-outputs/models/*
-!outputs/models/.gitkeep
-outputs/figures/*
-!outputs/figures/.gitkeep
-
-# ---- Local tooling (databases, scratch) ----
+# Local tooling (databases, scratch)
 tools/
 *.log
 
-# ---- OS / editor ----
+# OS / editor
 .DS_Store
 Thumbs.db
 .vscode/

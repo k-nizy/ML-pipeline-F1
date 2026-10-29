@@ -2,7 +2,13 @@ import unittest
 
 import pandas as pd
 
-from scripts.features import create_time_features
+from scripts.features import (
+    HISTORY_HOURS,
+    add_timestamp,
+    build_features,
+    create_time_features,
+    make_target,
+)
 
 
 class TestTimeFeatures(unittest.TestCase):
@@ -77,6 +83,43 @@ class TestTimeFeatures(unittest.TestCase):
             self.assertTrue(pd.isna(result.loc[row, "pm25_ma_7h"]))
 
         self.assertFalse(pd.isna(result.loc[18, "pm25_ma_7h"]))
+
+
+class TestSharedModelFeatures(unittest.TestCase):
+
+    def setUp(self):
+        self.raw = pd.DataFrame({
+            "year": [2024] * 30,
+            "month": [1] * 30,
+            "day": [1] * 24 + [2] * 6,
+            "hour": list(range(24)) + list(range(6)),
+            "pm2.5": range(1, 31),
+            "DEWP": [0] * 30,
+            "TEMP": [1] * 30,
+            "PRES": [2] * 30,
+            "cbwd": ["NE"] * 30,
+            "Iws": [3] * 30,
+            "Is": [0] * 30,
+            "Ir": [0] * 30,
+        })
+
+    def test_build_features_uses_expected_history_and_current_hour(self):
+        hourly = add_timestamp(self.raw)
+        features = build_features(hourly)
+
+        self.assertEqual(HISTORY_HOURS, 25)
+        self.assertEqual(features.loc[hourly.index[1], "pm25_lag_1h"], 1)
+        self.assertAlmostEqual(features.loc[hourly.index[6], "pm25_ma_7h"], 4)
+        self.assertAlmostEqual(features.loc[hourly.index[23], "pm25_ma_24h"], 12.5)
+        self.assertEqual(features.loc[hourly.index[0], "wind_NE"], 1)
+        self.assertEqual(features.loc[hourly.index[0], "wind_NW"], 0)
+
+    def test_target_is_shifted_by_requested_horizon(self):
+        hourly = add_timestamp(self.raw)
+        target = make_target(hourly, horizon=24)
+
+        self.assertEqual(target.iloc[0], 25)
+        self.assertTrue(pd.isna(target.iloc[-24]))
 
 
 if __name__ == "__main__":

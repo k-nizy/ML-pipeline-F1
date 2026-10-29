@@ -1,0 +1,8 @@
+experiment,val_rmse,val_mae,learning_rate,num_leaves,max_depth,min_child_samples,subsample,colsample_bytree,reg_alpha,reg_lambda,log_target,trees_used
+persistence_baseline,110.26,76.11,,,,,,,,,,
+E1_default,88.34,62.84,0.1,31.0,-1.0,20.0,0.8,0.8,0.0,0.0,False,34
+E2_slow_learning,88.4,62.75,0.02,31.0,-1.0,20.0,0.8,0.8,0.0,0.0,False,280
+E3_small_trees,88.09,62.7,0.02,15.0,6.0,50.0,0.8,0.8,0.0,0.0,False,286
+E4_regularized,87.75,62.67,0.02,15.0,6.0,50.0,0.7,0.6,1.0,5.0,False,269
+E5_regularized_log_target,96.88,63.0,0.02,15.0,6.0,50.0,0.7,0.6,1.0,5.0,True,266
+E6_optuna_tuned,87.75,62.74,0.0171,81.0,4.0,65.0,0.66,0.41,0.067,0.007,False,409

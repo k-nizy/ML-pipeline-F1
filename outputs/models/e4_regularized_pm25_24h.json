@@ -1,0 +1,68 @@
+{
+  "experiment": "E4_regularized",
+  "model_type": "LightGBM regression",
+  "model_file": "e4_regularized_pm25_24h.txt",
+  "horizon_hours": 24,
+  "target_column": "pm2.5",
+  "target_transform": "identity",
+  "feature_columns": [
+    "DEWP",
+    "TEMP",
+    "PRES",
+    "Iws",
+    "Is",
+    "Ir",
+    "wind_NE",
+    "wind_NW",
+    "wind_SE",
+    "wind_cv",
+    "hour",
+    "month",
+    "pm25",
+    "pm25_lag_1h",
+    "pm25_lag_2h",
+    "pm25_lag_3h",
+    "pm25_lag_24h",
+    "pm25_ma_7h",
+    "pm25_ma_24h"
+  ],
+  "feature_notes": {
+    "history_hours_required": 25,
+    "rolling_means_include_current_hour": true,
+    "missing_values": "Preserved as NaN for LightGBM; missing targets excluded."
+  },
+  "hyperparameters": {
+    "n_estimators": 269,
+    "learning_rate": 0.02,
+    "num_leaves": 15,
+    "max_depth": 6,
+    "min_child_samples": 50,
+    "subsample": 0.7,
+    "subsample_freq": 1,
+    "colsample_bytree": 0.6,
+    "reg_alpha": 1.0,
+    "reg_lambda": 5.0,
+    "random_state": 42,
+    "verbose": -1
+  },
+  "best_iteration_from_validation": 269,
+  "final_fit_target_year_range": [
+    2010,
+    2013
+  ],
+  "validation_target_year": 2013,
+  "test_target_year": 2014,
+  "validation_metrics": {
+    "rmse": 87.75,
+    "mae": 62.67
+  },
+  "final_refit_test_metrics": {
+    "rmse": 82.55445006653086,
+    "mae": 60.134341685852824
+  },
+  "persistence_test_metrics": {
+    "rmse": 98.7099286377721,
+    "mae": 67.26500116740603
+  },
+  "lightgbm_version": "4.7.0"
+}

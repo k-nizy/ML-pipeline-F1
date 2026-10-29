@@ -1,6 +1,42 @@
 import pandas as pd
 
 
+WEATHER_COLS = ["DEWP", "TEMP", "PRES", "Iws", "Is", "Ir"]
+WIND_CATS = ["NE", "NW", "SE", "cv"]
+LAGS = [1, 2, 3, 24]
+MA_WINDOWS = [7, 24]
+HISTORY_HOURS = max(max(LAGS) + 1, max(MA_WINDOWS))
+
+
+def add_timestamp(df):
+    """Build the timestamp, sort the rows, and enforce a complete hourly grid."""
+    df = df.copy()
+    df["timestamp"] = pd.to_datetime(df[["year", "month", "day", "hour"]])
+    return df.sort_values("timestamp").set_index("timestamp").asfreq("h")
+
+
+def build_features(df):
+    """Create the shared model features using observations through the current hour."""
+    features = df[WEATHER_COLS].copy()
+    for category in WIND_CATS:
+        features[f"wind_{category}"] = (df["cbwd"] == category).astype(int)
+    features["hour"] = df.index.hour
+    features["month"] = df.index.month
+    features["pm25"] = df["pm2.5"]
+    for lag in LAGS:
+        features[f"pm25_lag_{lag}h"] = df["pm2.5"].shift(lag)
+    for window in MA_WINDOWS:
+        features[f"pm25_ma_{window}h"] = (
+            df["pm2.5"].rolling(window, min_periods=window).mean()
+        )
+    return features
+
+
+def make_target(df, horizon):
+    """Return PM2.5 values `horizon` hours after each feature row."""
+    return df["pm2.5"].shift(-horizon)
+
+
 def create_time_features(df):
     """
     Create lag and moving-average features from hourly PM2.5 data.
