@@ -33,14 +33,14 @@ ML-pipeline-F1/
 ├── data/
 │   ├── raw/          # downloaded CSV (gitignored)
 │   └── processed/    # cleaned CSV produced by the data lead
-├── notebooks/        # EDA notebook
+├── notebooks/        # EDA notebook; also trains and exports the model files
 ├── scripts/
 │   ├── preprocess.py           # cleaning pipeline (data lead)
 │   ├── load_mysql.py           # CSV -> MySQL + daily rollup (SQL lead)
-│   ├── load_mongo.py           # CSV -> Atlas (MongoDB lead)
-│   ├── train_model.py          # training + experiments (model lead)
+│   ├── load_mongo.py           # CSV -> MongoDB (MongoDB lead)
 │   ├── export_query_results.py # regenerates outputs/query_results.md
-│   └── predict.py              # Task 4 end-to-end prediction
+│   ├── predict.py              # Task 4 end-to-end prediction
+│   └── smoke_test.py           # end-to-end check of both APIs and the prediction
 ├── sql/
 │   ├── schema.sql    # DDL: 6 tables, indexes, view, stored procedure, seed
 │   ├── queries.sql   # analytical queries
@@ -115,8 +115,14 @@ List responses carry an `X-Total-Count` header; pages are capped by `MAX_PAGE_SI
 
 ```bash
 python scripts/export_query_results.py --output outputs/query_results.md
-python scripts/predict.py            # Task 4
+python scripts/predict.py            # Task 4, prints the forecast as JSON
+python scripts/smoke_test.py         # checks every endpoint, then the prediction
 ```
+
+`predict.py` reads the latest hour and the previous 24 hours from the SQL API and
+prints one forecast. It does not write to the database. `smoke_test.py` needs both
+databases reachable; the MongoDB block is reported as skipped if `MONGO_URI` is
+not set, and its results are written to `outputs/e2e_test_run.md`.
 
 ## 5. Database design (Task 2)
 
@@ -130,15 +136,31 @@ Six tables in three layers — full rationale in [`sql/README.md`](sql/README.md
 
 MongoDB mirrors `readings` as one document per hour with embedded `target` and `weather` sub-documents — see [`mongodb/`](mongodb/).
 
+The three model tables (`models`, `forecast_runs`, `forecast_predictions`) are
+designed to store experiment results and forecasts, but nothing writes to them
+yet: training saves its output to `outputs/figures/experiment_table.csv` and
+`outputs/models/`, and `predict.py` prints its result. They are created and
+queryable, and query 7 returns no rows until a step is wired up to fill them.
+
 ## 6. Reproducing the results
 
 1. `pip install -r requirements.txt`
 2. Download the raw CSV (§2) into `data/raw/`
-3. Run the preprocessing notebook/script → `data/processed/beijing_clean.csv`
-4. Create and load MySQL (§4.2)
-5. `python notebook/pm25_EDA.ipynb` → writes the model to `outputs/models/`
-6. `uvicorn src.api.main:app` in one terminal, `python scripts/predict.py` in another
-7. `python scripts/export_query_results.py` to regenerate the evidence file
+3. Run the preprocessing script or notebook → `data/processed/beijing_clean.csv`
+4. Create and load MySQL (§4.2). On Windows the server is a service: `net start MySQL80`
+5. Train the model by opening `notebooks/pm25_EDA.ipynb` and running its training
+   cells. They write the model to `outputs/models/` and the experiment table to
+   `outputs/figures/experiment_table.csv`. There is no `scripts/train_model.py`
+   in this repository, so nothing here needs that file.
+6. MongoDB is optional for marking, but the `/api/mongo` routes need it: set
+   `MONGO_URI` in `.env` to the Atlas connection string, or to
+   `mongodb://127.0.0.1:27017` for a local server, then run
+   `python scripts/load_mongo.py` to load the 43,824 rows.
+7. `uvicorn src.api.main:app` in one terminal, `python scripts/predict.py` in
+   another. The prediction needs the API to be up, because it reads its input
+   window from `/api/sql/readings/latest` and `/api/sql/readings/range`.
+8. `python scripts/export_query_results.py` to regenerate the query evidence, and
+   `python scripts/smoke_test.py` to check the whole chain end to end.
 
 ## 7. Notes / limitations
 
