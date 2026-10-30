@@ -32,6 +32,8 @@ for row in df.itertuples():
     })
 
 readings.delete_many({})
+readings.create_index([("timestamp", 1)])
+readings.create_index([("station.id", 1), ("timestamp", -1)], unique=True)
 for i in range(0, len(docs), 5000):
     readings.insert_many(docs[i:i + 5000])
 print("loaded", readings.count_documents({}))
