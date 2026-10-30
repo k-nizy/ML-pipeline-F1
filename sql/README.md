@@ -27,9 +27,13 @@ make a query impossible to index.
 | Model | `forecast_runs` | one row per **experiment** | RMSE / MAE / R² for Experiment A, B, … → the experiment table becomes queryable. |
 | Model | `forecast_predictions` | one row per forecasted hour | Predicted vs actual, plus a generated absolute-error column. |
 
-The last three are what make Task 4's prediction script write *back* into the
-database instead of printing to stdout: a forecast is only reproducible if the
-model version and its metrics are stored next to the numbers it produced.
+The last three tables are designed to store model results, because a forecast is
+only reproducible if the model version and its metrics sit next to the numbers it
+produced. Nothing writes to them yet: `scripts/train_model.py` is not in this
+repository and saves its experiment results to
+`outputs/figures/experiment_table.csv`, and `scripts/predict.py` prints the
+forecast it produces instead of storing it. Query 7 therefore returns no rows
+until a training or prediction step is wired up to these tables.
 
 ## 2. Keys and constraints
 

@@ -27,7 +27,7 @@ Table 1. The tables created by `sql/schema.sql`.
 | `forecast_runs` | training run | 0 | one experiment with its RMSE, MAE and R2 |
 | `forecast_predictions` | forecasted hour | 0 | predicted value next to the actual value |
 
-The last three tables had no rows when I checked. Task 1 saved its results to `outputs/figures/experiment_table.csv` and `outputs/models/` rather than writing them into the database, so query 7 has nothing to return yet.
+The last three tables had no rows when I checked. They are designed to hold model results, but nothing writes to them yet. Task 1 saved its experiment results to `outputs/figures/experiment_table.csv` and `outputs/models/` instead of the database, and the prediction script prints its forecast instead of storing it, so query 7 returns nothing.
 
 ## 3. Keys and rules
 
@@ -237,7 +237,7 @@ This query returns no rows at the moment. Task 1 saved its results as a CSV inst
 - Times are stored exactly as they appear in the source, which is Beijing time, with no offset. If UTC data were added, every lag would shift by eight hours.
 - There is one station, so `stations` holds one row. The queries are written to survive several stations, but this dataset cannot compare two parts of the city.
 - PM2.5 is measured at the US Embassy while the weather columns come from Beijing Capital Airport about 20 km away. The mismatch comes from the dataset itself and is written in `data/README.md` rather than hidden.
-- The three model tables are created and used by query 7, but they stay empty until training and prediction write to the database.
+- The three model tables are created and query 7 is written against them, but they hold no rows. Training saved its metrics as a CSV and the prediction script prints its output, so no step writes to these tables yet.
 
 ## 9. How to reproduce
 
