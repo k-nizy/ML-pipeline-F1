@@ -34,9 +34,13 @@ db.readings.createIndex({ "station.id": 1, timestamp: -1 }, { unique: true });
 
 ## API surface
 
-Implemented in [`../src/api/routers/mongo.py`](../src/api/routers/mongo.py) — the
-routes and the connection helper (`src/api/db_mongo.py`) are already wired; each
-handler raises `501` until it is filled in. The endpoint list is identical to
-`/api/sql`, so the report can compare the two implementations side by side.
+Implemented in [`../src/api/routers/mongo.py`](../src/api/routers/mongo.py), using the
+connection helper `src/api/db_mongo.py`. All eight endpoints work and are tested
+(see [`api_tests.md`](api_tests.md)): health, create, list, latest, date range,
+get one, update and delete. The endpoint list mirrors `/api/sql`, so the report can
+compare the two implementations side by side.
 
-Set `MONGO_URI` in `.env` with the Atlas connection string.
+The data is loaded with [`../scripts/load_mongo.py`](../scripts/load_mongo.py)
+(43,824 documents). Missing PM2.5 readings are stored as `null`.
+
+Set `MONGO_URI` in `.env` with the Atlas connection string (never commit `.env`).
