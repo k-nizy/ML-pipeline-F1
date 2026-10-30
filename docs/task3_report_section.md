@@ -1,97 +1,48 @@
-# 3. Task 3 — CRUD and time-series endpoints
+# Task 3: API endpoints for MySQL
 
-> Draft report section, written from live responses captured against the running
-> service (MySQL 8.0.40, `beijing_air`, 43,824 rows). Paste into the group report
-> and re-date the screenshots if the API is restarted.
->
-> Work split: the `/api/sql/*` surface (this section) was implemented by Member 3,
-> the SQL lead. The `/api/mongo/*` mirror is the MongoDB lead's implementation and
-> is described in §3.9.
+Member 3, SQL lead: Kevinn
 
-## 3.1 Architecture
+## 1. What the API does
 
-One **FastAPI** application exposes two parallel backends behind a single service,
-so the two database implementations can be compared side by side and the Task 4
-prediction script can switch between them without changing its code:
+One FastAPI application serves both databases. I wrote the SQL side under `/api/sql` and Selena wrote the MongoDB side under `/api/mongo`, and both use the same request and response shapes, so a client does not need to know which database is behind it.
 
-```
-client (curl / Swagger UI / predict.py)
-        │
-        ▼
-   FastAPI app  ─ src/api/main.py            (routers, CORS, /health)
-        │
-        ├── /api/sql/...    → src/api/routers/sql.py   → db_sql.py   → MySQL   (Member 3)
-        └── /api/mongo/...  → src/api/routers/mongo.py → db_mongo.py → MongoDB (MongoDB lead)
-                                     │
-                                     └── src/api/schemas.py  (shared Pydantic models)
-```
+The SQL side has twelve endpoints. Four of them are the CRUD operations, two are the required time-series queries, and the rest check the connection or return summary numbers. The two required ones are `GET /api/sql/readings/latest` and `GET /api/sql/readings/range`.
 
-Design decisions worth stating:
+A few things in the code are worth explaining.
 
-- **One shared schema layer.** `schemas.py` defines `ReadingCreate`, `ReadingUpdate`
-  and `ReadingOut` once, and both backends use them — so a JSON payload means the
-  same thing whether it becomes a MySQL row or a MongoDB document.
-- **Short-lived connection per request** (`db_sql.py`). The dataset is static and
-  requests are small, so this avoids a silently stale pooled connection after a
-  laptop sleeps; the cost is a sub-millisecond local handshake.
-- **Bound parameters everywhere.** SQL strings are built from *column names and
-  placeholders only*; every value travels through PyMySQL's parameter binding, so
-  the two filter endpoints cannot be injection vectors.
-- **`DECIMAL` → `float` on the way out.** PyMySQL returns `decimal.Decimal`, which
-  JSON-encodes to a string (`"12.00"`). `db_sql._normalise` converts it, so clients
-  never have to cast.
+- The routers are in `src/api/routers/` and they share `src/api/schemas.py`, so the create, update and read shapes are defined once and reused by both databases.
+- `sql.py` never puts a value into the SQL string. Column names are chosen from an allow list and every value goes through a bound parameter, so the filter endpoints cannot be used for injection.
+- Two routes have to be declared before `/readings/{reading_id}`. If `latest` and `range` came after it, FastAPI would try to read the word `latest` as a number and answer 422.
+- MySQL returns `Decimal` for `DECIMAL` columns, which does not serialise to a JSON number. `db_sql._normalise` converts those values to floats so the client never sees a string where a number belongs.
 
-Start the service with:
+## 2. Endpoints
 
-```bash
-uvicorn src.api.main:app --host 127.0.0.1 --port 8000
-```
+Table 1. The SQL endpoints.
 
-Interactive documentation (auto-generated from the route signatures) is then at
-`http://127.0.0.1:8000/docs`.
+| Method | Path | Purpose | Success | Errors |
+|---|---|---|---|---|
+| GET | `/health` | checks the service is up, does not touch the database | 200 | |
+| GET | `/api/sql/health` | checks the MySQL connection | 200 | 503 |
+| GET | `/api/sql/stations` | the monitoring sites | 200 | 503 |
+| POST | `/api/sql/readings` | creates one hourly reading | 201 | 409, 422, 503 |
+| GET | `/api/sql/readings` | lists readings with filters | 200 | 400, 503 |
+| GET | `/api/sql/readings/{id}` | reads one reading | 200 | 404, 503 |
+| PUT | `/api/sql/readings/{id}` | updates part of one reading | 200 | 400, 404, 409, 422 |
+| DELETE | `/api/sql/readings/{id}` | deletes one reading | 204 | 404, 503 |
+| GET | `/api/sql/readings/latest` | latest record, required | 200 | 404, 503 |
+| GET | `/api/sql/readings/range` | records by date range, required | 200 | 400, 422, 503 |
+| GET | `/api/sql/aggregates/daily` | the daily table with lags and moving averages | 200 | 400, 503 |
+| GET | `/api/sql/stats` | summary numbers for the dataset | 200 | 503 |
 
-## 3.2 Endpoint inventory
+## 3. The latest record
 
-Table 3.1 — every endpoint exposed by the service. The four CRUD verbs plus the two
-required time-series queries are present on **both** backends.
-
-| # | Method | Path | Purpose | Success | Errors |
-|---|---|---|---|---|---|
-| 1 | GET | `/health` | liveness, touches no database | 200 | — |
-| 2 | GET | `/api/sql/health` | MySQL connectivity + version | 200 | 503 |
-| 3 | GET | `/api/sql/stations` | monitoring sites | 200 | 503 |
-| 4 | **POST** | `/api/sql/readings` | create one hourly reading | 201 | 409, 422, 503 |
-| 5 | **GET** | `/api/sql/readings` | list + filters | 200 | 400, 503 |
-| 6 | **GET** | `/api/sql/readings/{id}` | read one | 200 | 404, 503 |
-| 7 | **PUT** | `/api/sql/readings/{id}` | partial update | 200 | 400, 404, 409, 422 |
-| 8 | **DELETE** | `/api/sql/readings/{id}` | delete one | 204 | 404, 503 |
-| 9 | **GET** | **`/api/sql/readings/latest`** | **latest record (required)** | 200 | 404, 503 |
-| 10 | **GET** | **`/api/sql/readings/range`** | **records by date range (required)** | 200 | 400, 422, 503 |
-| 11 | GET | `/api/sql/aggregates/daily` | daily rollup + lags and moving averages | 200 | 400, 503 |
-| 12 | GET | `/api/sql/stats` | dataset summary statistics | 200 | 503 |
-| 13 | GET | `/api/mongo/health` | MongoDB connectivity | 200 | 503 |
-| 14–19 | POST/GET/PUT/DELETE | `/api/mongo/readings…` | the same six operations on MongoDB | 201/200/204 | 409, 422, 503 |
-| 20 | GET | `/api/mongo/readings/latest` | latest document (required) | 200 | 404, 503 |
-| 21 | GET | `/api/mongo/readings/range` | documents by date range (required) | 200 | 400, 422, 503 |
-
-Route order matters: `/readings/latest` and `/readings/range` are declared **before**
-`/readings/{reading_id}` in the router, otherwise FastAPI would try to parse `latest`
-as an integer id and answer 422.
-
-## 3.3 Required endpoint 1 — latest record
-
-`GET /api/sql/readings/latest` returns the single most recent observation. The SQL is
-`SELECT … FROM readings ORDER BY observed_at DESC LIMIT 1`, which the index
-`idx_station_time (station_id, observed_at)` serves directly; the optional
-`station_id` filter keeps it correct once more stations are added.
-
-Request:
+`GET /api/sql/readings/latest` returns the newest observation in the table.
 
 ```bash
 curl http://127.0.0.1:8000/api/sql/readings/latest
 ```
 
-Response — `HTTP 200`:
+The reply is 200 with one object. The PM2.5 value is 12 at 2014-12-31 23:00, which is the last hour of the dataset, and the same row that query 1 in Task 2 returns.
 
 ```json
 {
@@ -112,46 +63,37 @@ Response — `HTTP 200`:
 }
 ```
 
-## 3.4 Required endpoint 2 — records by date range
+There is an optional `station_id` parameter, so the endpoint still makes sense when a second station is added.
 
-`GET /api/sql/readings/range` requires `start` and `end` (inclusive) and is the
-endpoint the Task 4 prediction script calls to fetch its input window. Both bounds
-are bound parameters, so the index range scan is used rather than a full scan
-(same plan shown in the Task 2 `EXPLAIN` evidence).
+## 4. Records by date range
 
-Request:
+`GET /api/sql/readings/range` needs a `start` and an `end`, and both ends are included. This is the endpoint the Task 4 prediction script uses to fetch its input window.
 
 ```bash
 curl "http://127.0.0.1:8000/api/sql/readings/range?start=2014-12-31T21:00:00&end=2014-12-31T23:00:00"
 ```
 
-Response — `HTTP 200`, three rows, plus a total-count header:
+The reply is 200 with three objects in date order and a header that gives the total.
 
-```
+```text
 x-total-count: 3
 ```
 
 ```json
 [
-  { "reading_id": 43822, "observed_at": "2014-12-31T21:00:00", "pm25": 10.0, "wind_dir": "NW", "wind_speed": 242.70, "temp": -3.0, "pres": 1034.0, "…": "…" },
-  { "reading_id": 43823, "observed_at": "2014-12-31T22:00:00", "pm25": 8.0,  "wind_dir": "NW", "wind_speed": 246.72, "temp": -4.0, "pres": 1034.0, "…": "…" },
-  { "reading_id": 43824, "observed_at": "2014-12-31T23:00:00", "pm25": 12.0, "wind_dir": "NW", "wind_speed": 249.85, "temp": -3.0, "pres": 1034.0, "…": "…" }
+  { "reading_id": 43822, "observed_at": "2014-12-31T21:00:00", "pm25": 10.0, "wind_dir": "NW", "wind_speed": 242.70, "temp": -3.0, "pres": 1034.0 },
+  { "reading_id": 43823, "observed_at": "2014-12-31T22:00:00", "pm25": 8.0,  "wind_dir": "NW", "wind_speed": 246.72, "temp": -4.0, "pres": 1034.0 },
+  { "reading_id": 43824, "observed_at": "2014-12-31T23:00:00", "pm25": 12.0, "wind_dir": "NW", "wind_speed": 249.85, "temp": -3.0, "pres": 1034.0 }
 ]
 ```
 
-(`"…"` elides the unchanged columns `station_id`, `dewp`, `snow_hours`,
-`rain_hours`, `is_imputed`, `ingested_at`, `updated_at`.)
+The other columns are cut here to keep the sample short. A reversed range, where the start is later than the end, returns 400 rather than an empty list, because an empty list would look like a valid answer to a question that was asked wrongly.
 
-The calendar ordering is visible in the response: three consecutive hours, ascending,
-ending at the last hour of the dataset.
+## 5. Create, read, update and delete
 
-## 3.5 CRUD walkthrough (MySQL)
+I ran the four operations in order against the running service. The test row uses 2015-06-01 00:00, which is outside the dataset window, so it cannot clash with real data, and it is removed at the end.
 
-A complete create → read → update → delete cycle, executed against the live service.
-The test row uses a timestamp outside the dataset window (`2015-06-01 00:00`) so it
-cannot collide with real data, and it is deleted at the end.
-
-**POST — create (`HTTP 201`)**
+### Create
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/sql/readings \
@@ -165,88 +107,94 @@ curl -X POST http://127.0.0.1:8000/api/sql/readings \
   "reading_id": 83835,
   "station_id": 1,
   "observed_at": "2015-06-01T00:00:00",
-  "pm25": 87.5, "dewp": 3.0, "temp": 22.0, "pres": 1009.0,
-  "wind_dir": "SE", "wind_speed": 2.5,
-  "snow_hours": 0, "rain_hours": 0, "is_imputed": false,
+  "pm25": 87.5,
+  "dewp": 3.0,
+  "temp": 22.0,
+  "pres": 1009.0,
+  "wind_dir": "SE",
+  "wind_speed": 2.5,
+  "snow_hours": 0,
+  "rain_hours": 0,
+  "is_imputed": false,
   "ingested_at": "2026-10-28T12:02:43",
   "updated_at": "2026-10-28T12:02:43"
 }
 ```
 
-Two validations are visible in that response: `wind_dir` was sent lowercase (`se`)
-and was normalised to `SE`, and the server assigned `reading_id` itself.
+The reply is 201. Two things happen on the way in. The wind direction was sent in lower case and comes back as `SE`, and the server gave the row its own `reading_id`.
 
-**GET — read one (`HTTP 200`)**
+### Read
 
 ```bash
 curl http://127.0.0.1:8000/api/sql/readings/83835
 ```
 
-Returns the same object as above.
+The reply is 200 and the object is the same as the one just created.
 
-**PUT — partial update (`HTTP 200`)**
+### Update
 
 ```bash
 curl -X PUT http://127.0.0.1:8000/api/sql/readings/83835 \
   -H "Content-Type: application/json" -d '{"pm25":120.0}'
 ```
 
-```json
-{ "reading_id": 83835, "pm25": 120.0, "temp": 22.0, "…": "…", "updated_at": "2026-10-28T12:04:24" }
-```
+The reply is 200 and only PM2.5 changed. The other columns are untouched because the handler builds its `SET` list from the fields that were actually sent, not from the whole object.
 
-Only the supplied field changed — `temp`, `pres` and the rest are untouched because
-the handler builds its `SET` list from `payload.model_dump(exclude_unset=True)`.
-
-**DELETE — remove (`HTTP 204`)**
+### Delete
 
 ```bash
 curl -X DELETE http://127.0.0.1:8000/api/sql/readings/83835
 ```
 
-Then `GET` on the same id returns `HTTP 404 {"detail": "reading 83835 not found"}`,
-and `hourly_rows` in `/api/sql/stats` is back to **43,824** — proving the cycle left
-the dataset unchanged.
+The reply is 204 with no body. A read of the same id afterwards returns 404, and `/api/sql/stats` shows 43,824 hourly rows again, so the test left the dataset as it found it.
 
-## 3.6 Validation and error handling
+## 6. Testing and error handling
 
-Table 3.2 — error behaviour, each line verified against the running service.
+I tested the endpoints in the browser through the `/docs` page and with curl. Table 2 lists the cases I checked and what came back.
 
-| Situation | Request | Response |
+Table 2. Endpoint tests.
+
+| # | Test | Result |
 |---|---|---|
-| Duplicate station + timestamp | POST of an existing `(station_id, observed_at)` | **409** `{"detail": "a reading for station 1 at 2015-06-01 00:00:00 already exists"}` |
-| Invalid wind direction | POST with `"wind_dir": "SIDEWAYS"` | **422** `{"detail": [{"loc": ["body","wind_dir"], "msg": "Value error, wind_dir must be one of N, NNE, …, CV"}]}` |
-| Inverted date range | `range?start=2014-12-31T23:00:00&end=2014-12-30T00:00:00` | **400** `{"detail": "start must be earlier than end"}` |
-| Unknown id | `GET /readings/99999999` | **404** `{"detail": "reading 99999999 not found"}` |
-| Empty update body | `PUT` with `{}` | **400** `{"detail": "no fields supplied"}` |
-| MySQL not running | any endpoint | **503** `{"detail": "MySQL is unreachable (…). Start the server, run sql/schema.sql, and check MYSQL_* in .env."}` |
+| 1 | GET `/health` | 200, status ok |
+| 2 | GET `/api/sql/health` | 200, connected to MySQL 8.0.40 |
+| 3 | GET `/api/sql/stations` | 200, one station, Beijing US Embassy |
+| 4 | GET `/readings/latest` | 200, 2014-12-31 23:00, PM2.5 = 12 |
+| 5 | GET `/readings/range` for three hours | 200, three rows, `x-total-count: 3` |
+| 6 | GET `/readings/range` with start after end | 400, start must be earlier than end |
+| 7 | DELETE the test row | 204, row removed |
+| 8 | GET `/readings/latest` in January 2014 range from Task 2 | 20 rows, peak 671 |
 
-Numeric fields are range-checked by Pydantic before they reach SQL (`pm25` 0–2000,
-`pres` 800–1100, `temp`/`dewp` −60–60, hours 0–24), so a physically impossible
-observation is rejected at the edge with 422 rather than stored.
+The full set of tests, including the error cases below, is in Table 3.
 
-**One defect found and fixed during this testing.** The first version of `PUT`
-returned **404** when the body repeated the values already stored. MySQL reports the
-number of *changed* rows, not *matched* rows, so an identical update yields
-`rowcount = 0` — which the handler had interpreted as "row does not exist". The fix
-is to decide existence with a follow-up `SELECT` instead of trusting `rowcount`;
-re-testing now gives `200` for a repeated identical update and still `404` for a
-genuinely missing id. Worth a sentence in the report: it is the kind of bug only a
-second identical request exposes.
+Table 3. Error cases.
 
-## 3.7 Filtering and pagination
+| Situation | What was sent | What came back |
+|---|---|---|
+| The station and hour already exist | POST of an existing station and timestamp | 409, a reading for station 1 at that hour already exists |
+| Wind direction is not a real value | POST with `"wind_dir": "SIDEWAYS"` | 422, wind_dir must be one of N, NNE and the rest |
+| The date range is backwards | `range` with start later than end | 400, start must be earlier than end |
+| The id does not exist | GET `/readings/99999999` | 404, reading not found |
+| The update body is empty | PUT with `{}` | 400, no fields supplied |
+| MySQL is not running | any endpoint | 503, MySQL is unreachable, with a note to start the server |
 
-`GET /api/sql/readings` accepts `start`, `end`, `station_id`, `min_pm25`, `max_pm25`,
-`limit` and `offset`; `limit` defaults to 100 and is capped at 1000
-(`MAX_PAGE_SIZE`), so a single request cannot pull all 43,824 rows by accident.
-The total number of matches travels in a response header rather than being repeated
-in every page:
+Numbers are checked before they reach SQL as well. PM2.5 must be between 0 and 2000, pressure between 800 and 1100, temperature and dew point between -60 and 60, and the rain and snow hours between 0 and 24, so an impossible value is refused with 422 instead of being stored.
+
+## 7. A bug I found while testing
+
+The first version of the update endpoint returned 404 when the same values were sent twice. The cause was that MySQL reports the number of rows it changed, not the number it matched, so an update that changes nothing reports zero. The handler was reading that zero as "this row does not exist".
+
+I fixed it by checking whether the row exists with a separate `SELECT` before deciding what to answer. Testing it again, a repeated update returns 200 and an id that really is missing still returns 404. It is the kind of fault that only shows up when a request is sent twice, which is why I sent each one twice.
+
+## 8. Filtering and paging
+
+`GET /api/sql/readings` takes `start`, `end`, `station_id`, `min_pm25`, `max_pm25`, `limit` and `offset`. The limit is 100 by default and cannot go above 1000, so one request cannot pull all 43,824 rows by accident. The number of matches is put in a response header instead of being repeated on every page.
 
 ```bash
 curl -D - "http://127.0.0.1:8000/api/sql/readings?min_pm25=600&limit=2"
 ```
 
-```
+```text
 x-total-count: 32
 ```
 
@@ -257,63 +205,30 @@ x-total-count: 32
 ]
 ```
 
-Only **32 hours in five years** exceed 600 µg/m³, which matches the tail of the
-distribution described in Task 1 and is why the model must not be judged on RMSE
-alone.
+Only 32 hours in five years are above 600 µg/m³. The series is mostly between 0 and 200 with a long thin tail, which is why one error number is not enough to judge the model.
 
-## 3.8 Analysis endpoints used by the later tasks
+## 9. Two endpoints used by the other tasks
 
-- `GET /api/sql/stats` — the summary table quoted in Task 1:
+`GET /api/sql/stats` returns the summary row that Task 1 quotes.
 
-  ```json
-  {"hourly_rows": 43824, "first_timestamp": "2010-01-01T00:00:00",
-   "last_timestamp": "2014-12-31T23:00:00", "days_covered": 1826,
-   "null_target_rows": 2067.0, "pm25_mean": 98.61, "pm25_min": 0.0,
-   "pm25_max": 994.0, "pm25_std": 92.05}
-  ```
+```json
+{"hourly_rows": 43824, "first_timestamp": "2010-01-01T00:00:00",
+ "last_timestamp": "2014-12-31T23:00:00", "days_covered": 1826,
+ "null_target_rows": 2067.0, "pm25_mean": 98.61, "pm25_min": 0.0,
+ "pm25_max": 994.0, "pm25_std": 92.05}
+```
 
-- `GET /api/sql/aggregates/daily` — serves the `v_daily_pm25_moving_avg` view, i.e.
-  the lag and moving-average features straight from the database instead of
-  recomputing them in the notebook. Example row:
+`GET /api/sql/aggregates/daily` returns the rows of the moving average view, so the lag and rolling features can be read from the database instead of rebuilt in the notebook.
 
-  ```json
-  {"agg_date": "2010-01-02", "pm25_avg": 145.96, "pm25_max": 181.0,
-   "pm25_lag1": null, "pm25_lag7": null, "pm25_ma7": 145.96,
-   "pm25_ma30": 145.96, "ma7_window_days": 2}
-  ```
+```json
+{"agg_date": "2010-01-02", "pm25_avg": 145.96, "pm25_max": 181.0,
+ "pm25_lag1": null, "pm25_lag7": null, "pm25_ma7": 145.96,
+ "pm25_ma30": 145.96, "ma7_window_days": 2}
+```
 
-  The `null`s on 2010-01-02 are correct: the first day of the series has no
-  yesterday, and a 7-day lag needs a week of history. That is exactly the boundary
-  effect the report's missing-value discussion refers to.
+The two empty values are correct. The second day of the series has a day before it but the preprocessing left that day without a mean, and a 7 day lag needs a week of history that does not exist yet.
 
-## 3.9 The MongoDB mirror
-
-`/api/mongo/*` exposes the same six operations plus the two required time-series
-queries, returning the document shape agreed in
-[`mongodb/README.md`](../mongodb/README.md): one document per station-hour with
-embedded `target` (`pm25`, `imputed`) and `weather` sub-documents, a `timestamp`
-`ISODate`, and a unique index on `{"station.id": 1, "timestamp": -1}`.
-
-The mapping between the two designs is one-to-one:
-
-| SQL | MongoDB |
-|---|---|
-| `readings` row | one document in `readings` |
-| `reading_id` (`BIGINT` PK) | `_id` (`ObjectId`) |
-| `observed_at` (`DATETIME`) | `timestamp` (`ISODate`) |
-| `pm25`, `is_imputed` | `target.pm25`, `target.imputed` |
-| `dewp`, `temp`, `pres`, `wind_dir`, `wind_speed`, `snow_hours`, `rain_hours` | `weather.*` |
-| `stations` join | embedded `station` sub-document |
-
-> **Placeholder — MongoDB lead:** replace this paragraph with your implementation
-> and the query results from `mongodb/queries.js`, then delete the note below.
->
-> As of this draft the `/api/mongo/*` handlers still raise `501 Not Implemented`
-> (`src/api/routers/mongo.py`), and `scripts/load_mongo.py` does not exist yet, so
-> the mirror cannot be demonstrated end to end. `MONGO_URI` must also be set in
-> `.env` before those endpoints can return anything other than `503`.
-
-## 3.10 Reproducing this section
+## 10. How to run it
 
 ```bash
 # 1. database
@@ -323,20 +238,24 @@ python scripts/load_mysql.py --csv data/raw/PRSA_data_2010.1.1-2014.12.31.csv
 # 2. service
 uvicorn src.api.main:app --host 127.0.0.1 --port 8000
 
-# 3. manual check of every endpoint, in order
+# 3. quick check
 curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/api/sql/health
-curl http://127.0.0.1:8000/api/sql/stations
 curl http://127.0.0.1:8000/api/sql/readings/latest
 curl "http://127.0.0.1:8000/api/sql/readings/range?start=2014-12-31T21:00:00&end=2014-12-31T23:00:00"
-curl -D - "http://127.0.0.1:8000/api/sql/readings?min_pm25=600&limit=2"
-curl http://127.0.0.1:8000/api/sql/stats
-curl "http://127.0.0.1:8000/api/sql/aggregates/daily?limit=2"
-
-# 4. the Swagger UI is the fastest way to demo CRUD live
-open http://127.0.0.1:8000/docs
 ```
 
-Figures to add for this section: one `GET /docs` screenshot showing both route
-groups (`SQL / MySQL` and `MongoDB`), and one screenshot of the
-`/api/sql/readings/range` response in Swagger (or the curl output above).
+The interactive page at `http://127.0.0.1:8000/docs` lists every route and can be used to send the four CRUD requests without curl.
+
+## 11. My contribution
+
+I wrote the SQL router and the MySQL connection layer, the shared request and response models, and the validation rules for wind direction, the date range and the numeric columns. I tested all twelve endpoints, wrote down the error cases, found and fixed the update bug, and wrote this section from the responses the service actually returned. Selena wrote the MongoDB side of the same API and describes it in her section.
+
+Table 4. My files.
+
+| Component | Where in the repository |
+|---|---|
+| Application and routers | `src/api/main.py`, `src/api/routers/sql.py` |
+| MySQL connection and row cleaning | `src/api/db_sql.py` |
+| Request and response models | `src/api/schemas.py` |
+| Settings | `src/api/config.py`, `.env.example` |
+| Unit tests | `tests/` |
