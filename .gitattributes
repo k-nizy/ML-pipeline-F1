@@ -1,0 +1,4 @@
+# LightGBM text models store byte offsets inside the file, so git must not
+# convert their line endings. With core.autocrlf=true on Windows the checkout
+# gains a \r per line and lightgbm fails with "Model format error".
+outputs/models/*.txt -text
