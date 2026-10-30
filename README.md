@@ -136,7 +136,7 @@ MongoDB mirrors `readings` as one document per hour with embedded `target` and `
 2. Download the raw CSV (§2) into `data/raw/`
 3. Run the preprocessing notebook/script → `data/processed/beijing_clean.csv`
 4. Create and load MySQL (§4.2)
-5. `python scripts/train_model.py` → writes metrics to `forecast_runs` and the model to `outputs/models/`
+5. `python notebook/pm25_EDA.ipynb` → writes the model to `outputs/models/`
 6. `uvicorn src.api.main:app` in one terminal, `python scripts/predict.py` in another
 7. `python scripts/export_query_results.py` to regenerate the evidence file
 
